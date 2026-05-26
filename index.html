@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>死了么 · StillHere（独立演示版）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .pulse-ring {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
+    70%  { box-shadow: 0 0 0 24px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  }
+</style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+
+<div class="max-w-3xl mx-auto p-4 md:p-6">
+  <!-- 头部 -->
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-800">
+        🌱 死了么
+        <span class="text-sm font-normal text-slate-500 ml-2">StillHere · 独立演示版</span>
+      </h1>
+      <p class="text-xs text-slate-400 mt-1">所有逻辑在你的浏览器中运行，数据保存在 localStorage</p>
+    </div>
+    <div id="user-info" class="text-sm text-slate-600 text-right"></div>
+  </header>
+
+  <!-- 登录卡片（未登录时显示） -->
+  <section id="login-card" class="bg-white rounded-2xl shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-3">登录 / 注册</h2>
+    <p class="text-sm text-slate-500 mb-4">
+      纯前端演示，无需短信验证码。默认演示参数：<b>20 秒</b>未签到 + <b>10 秒</b>宽限期 → 第 30 秒触发预警，每 10 秒推进一级。
+    </p>
+    <div class="flex gap-2">
+      <input id="login-phone" type="text" placeholder="手机号，如 13800138000"
+             class="flex-1 border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      <input id="login-nickname" type="text" placeholder="昵称（可选）"
+             class="w-32 border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      <button onclick="doLogin()" class="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-medium">
+        进入
+      </button>
+    </div>
+  </section>
+
+  <!-- 主内容（登录后显示） -->
+  <main id="main-content" class="hidden space-y-6">
+
+    <!-- 状态卡片 -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <div class="flex items-start justify-between mb-4">
+        <div>
+          <p class="text-sm text-slate-500">状态</p>
+          <p id="status-text" class="text-xl font-semibold text-slate-800">加载中…</p>
+          <p id="status-detail" class="text-sm text-slate-500 mt-1"></p>
+        </div>
+        <span id="status-badge" class="px-3 py-1 rounded-full text-xs font-medium"></span>
+      </div>
+
+      <!-- 大签到按钮 -->
+      <div class="flex justify-center my-6">
+        <button id="checkin-btn" onclick="doCheckIn()"
+                class="pulse-ring w-44 h-44 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xl font-bold shadow-lg hover:from-blue-500 hover:to-blue-700 active:scale-95 transition">
+          我还在<br><span class="text-sm font-normal opacity-80">点这里签到</span>
+        </button>
+      </div>
+
+      <!-- 演示模式参数 -->
+      <details class="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
+        <summary class="cursor-pointer font-medium">⚙️ 演示参数（点开调整）</summary>
+        <div class="mt-3 grid grid-cols-3 gap-3">
+          <label class="flex flex-col">
+            <span class="text-xs text-slate-500 mb-1">签到周期（秒）</span>
+            <input id="period-input" type="number" value="20" min="5" class="border rounded px-2 py-1" />
+          </label>
+          <label class="flex flex-col">
+            <span class="text-xs text-slate-500 mb-1">宽限期（秒）</span>
+            <input id="grace-input" type="number" value="10" min="0" class="border rounded px-2 py-1" />
+          </label>
+          <label class="flex flex-col">
+            <span class="text-xs text-slate-500 mb-1">每级间隔（秒）</span>
+            <input id="advance-input" type="number" value="10" min="3" class="border rounded px-2 py-1" />
+          </label>
+          <button onclick="updatePeriod()" class="col-span-2 bg-slate-700 hover:bg-slate-800 text-white py-2 rounded">
+            保存参数
+          </button>
+          <button onclick="resetAll()" class="bg-red-500 hover:bg-red-600 text-white py-2 rounded">
+            清空所有数据
+          </button>
+        </div>
+      </details>
+    </section>
+
+    <!-- SOS 卡片 -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-red-600">🚨 SOS 一键呼救</h2>
+        <span id="sos-status" class="text-sm text-slate-500"></span>
+      </div>
+
+      <div id="sos-idle">
+        <button onclick="triggerSos()"
+                class="w-full bg-gradient-to-br from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 text-white py-4 rounded-xl text-lg font-bold shadow">
+          🆘 触发 SOS（10 秒倒计时）
+        </button>
+        <p class="text-xs text-slate-500 mt-2">演示模式倒计时 10 秒，到期后会"通知"所有联系人（写入下方通知日志）</p>
+      </div>
+
+      <div id="sos-active" class="hidden">
+        <div class="bg-red-50 border-2 border-red-300 rounded-xl p-4 text-center">
+          <p class="text-sm text-red-600">SOS 倒计时中</p>
+          <p id="sos-countdown" class="text-5xl font-bold text-red-600 my-2">--</p>
+          <button onclick="cancelSos()" class="bg-slate-600 hover:bg-slate-700 text-white px-6 py-2 rounded-lg">
+            取消 SOS
+          </button>
+          <button onclick="endSos()" class="ml-2 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg">
+            我已安全
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 紧急联系人 -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <h2 class="text-lg font-semibold mb-3">👥 紧急联系人（最多 5 人）</h2>
+      <ul id="contacts-list" class="space-y-2 mb-4"></ul>
+
+      <div class="grid grid-cols-12 gap-2">
+        <input id="contact-phone" placeholder="手机号" class="col-span-4 border rounded px-2 py-2 text-sm" />
+        <input id="contact-name" placeholder="姓名" class="col-span-3 border rounded px-2 py-2 text-sm" />
+        <input id="contact-relation" placeholder="关系，如 母亲" class="col-span-3 border rounded px-2 py-2 text-sm" />
+        <button onclick="addContact()" class="col-span-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
+          添加
+        </button>
+      </div>
+    </section>
+
+    <!-- 事件流 -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">📋 事件流</h2>
+        <button onclick="logout()" class="text-xs text-slate-500 hover:text-slate-700 underline">退出登录</button>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-slate-700 mb-2">⚠️ 预警事件</h3>
+          <ul id="alerts-list" class="space-y-2 text-sm max-h-96 overflow-y-auto"></ul>
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-slate-700 mb-2">📨 通知日志（mock 短信/推送/电话）</h3>
+          <ul id="notifications-list" class="space-y-2 text-sm max-h-96 overflow-y-auto"></ul>
+        </div>
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-400 py-4">
+      独立演示版 · 数据保存在浏览器 localStorage · 关闭浏览器不会丢失，点"清空所有数据"可重置
+    </footer>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+// =============================================================================
+// Store：所有数据持久化到 localStorage
+// =============================================================================
+
+const STORAGE_KEY = "stillhere_standalone_v1";
+
+const DEFAULT_STATE = {
+  user: null,
+  contacts: [],
+  alerts: [],
+  sosEvents: [],
+  notifications: [],
+  nextId: 1,
+};
+
+let state = loadState();
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return clone(DEFAULT_STATE);
+    return Object.assign(clone(DEFAULT_STATE), JSON.parse(raw));
+  } catch (e) {
+    console.error("loadState failed", e);
+    return clone(DEFAULT_STATE);
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function newId() { return state.nextId++; }
+function nowMs() { return Date.now(); }
+
+// =============================================================================
+// 通知层（mock：写到 notifications 数组里）
+// =============================================================================
+
+function notify(channel, target, title, body, eventType, eventId) {
+  state.notifications.unshift({
+    id: newId(),
+    channel, target, title, body,
+    type: eventType,
+    eventId,
+    sentAt: nowMs(),
+  });
+  if (state.notifications.length > 50) state.notifications.length = 50;
+}
+
+// =============================================================================
+// 业务操作
+// =============================================================================
+
+function doLogin() {
+  const phone = document.getElementById("login-phone").value.trim();
+  const nickname = document.getElementById("login-nickname").value.trim();
+  if (!phone) { alert("请输入手机号"); return; }
+
+  if (!state.user) {
+    state.user = {
+      phone,
+      nickname: nickname || phone.slice(-4),
+      period: 20,
+      grace: 10,
+      advance: 10,
+      lastCheckIn: nowMs(),
+      alertLevel: "none",
+      alertLevelAdvancedAt: null,
+    };
+  } else {
+    state.user.phone = phone;
+    if (nickname) state.user.nickname = nickname;
+  }
+  saveState();
+  showMain();
+}
+
+function logout() {
+  document.getElementById("login-card").classList.remove("hidden");
+  document.getElementById("main-content").classList.add("hidden");
+  document.getElementById("user-info").textContent = "";
+}
+
+function resetAll() {
+  if (!confirm("确认清空所有数据？此操作不可撤销。")) return;
+  state = clone(DEFAULT_STATE);
+  saveState();
+  logout();
+}
+
+function doCheckIn() {
+  if (!state.user) return;
+  state.user.lastCheckIn = nowMs();
+  state.user.alertLevel = "none";
+  state.user.alertLevelAdvancedAt = null;
+
+  state.alerts.filter(a => a.status === "active").forEach(a => {
+    a.status = "resolved";
+    a.resolution = "self_check_in";
+    a.resolvedAt = nowMs();
+    a.timeline.push({ level: "resolved", action: "self_check_in", at: new Date().toISOString() });
+  });
+  saveState();
+  flash("签到成功！今天也要好好的 🌱");
+  refreshUI();
+}
+
+function updatePeriod() {
+  const p = parseInt(document.getElementById("period-input").value);
+  const g = parseInt(document.getElementById("grace-input").value);
+  const a = parseInt(document.getElementById("advance-input").value);
+  if (isNaN(p) || isNaN(g) || isNaN(a)) { alert("请输入有效数字"); return; }
+  state.user.period = p;
+  state.user.grace = g;
+  state.user.advance = a;
+  saveState();
+  flash("已保存，下个 tick 生效");
+  refreshUI();
+}
+
+function addContact() {
+  const phone = document.getElementById("contact-phone").value.trim();
+  const name = document.getElementById("contact-name").value.trim();
+  const relation = document.getElementById("contact-relation").value.trim();
+  if (!phone) { alert("请输入手机号"); return; }
+  if (state.contacts.length >= 5) { alert("最多 5 位联系人"); return; }
+  state.contacts.push({
+    id: newId(),
+    phone, name, relation,
+    priority: state.contacts.length + 1,
+  });
+  saveState();
+  document.getElementById("contact-phone").value = "";
+  document.getElementById("contact-name").value = "";
+  document.getElementById("contact-relation").value = "";
+  refreshUI();
+}
+
+function removeContact(id) {
+  if (!confirm("确定删除？")) return;
+  state.contacts = state.contacts.filter(c => c.id !== id);
+  saveState();
+  refreshUI();
+}
+
+function triggerSos() {
+  if (!state.user) return;
+  if (!confirm("确认触发 SOS？\n10 秒倒计时后会通知所有紧急联系人。")) return;
+  const sos = {
+    id: newId(),
+    triggeredAt: nowMs(),
+    countdownUntil: nowMs() + 10000,
+    activatedAt: null,
+    endedAt: null,
+    source: "manual",
+    status: "pending",
+    lat: 39.9042, lng: 116.4074,
+  };
+  state.sosEvents.unshift(sos);
+  notify("push", "self", "SOS 倒计时已开始",
+    "10 秒后将通知你的紧急联系人。如需取消请立即操作。",
+    "sos", sos.id);
+  saveState();
+  refreshUI();
+}
+
+function cancelSos() {
+  const sos = currentActiveSos();
+  if (!sos || sos.status !== "pending") return;
+  sos.status = "cancelled";
+  sos.endedAt = nowMs();
+  saveState();
+  refreshUI();
+}
+
+function endSos() {
+  const sos = currentActiveSos();
+  if (!sos) return;
+  sos.status = "ended";
+  sos.endedAt = nowMs();
+  state.contacts.forEach(c => {
+    notify("sms", c.phone, "安全确认",
+      `${state.user.nickname} 已确认安全，SOS 已解除。`,
+      "sos", sos.id);
+  });
+  saveState();
+  refreshUI();
+}
+
+function currentActiveSos() {
+  return state.sosEvents.find(s => s.status === "pending" || s.status === "active" || s.status === "acknowledged");
+}
+
+// =============================================================================
+// 调度引擎（每 1 秒 tick）：与后端 scheduler.py 等价
+// =============================================================================
+
+const LEVEL_ORDER = ["none", "l1", "l2", "l3", "l4"];
+
+function nextLevel(curr) {
+  const i = LEVEL_ORDER.indexOf(curr);
+  return (i >= 0 && i < LEVEL_ORDER.length - 1) ? LEVEL_ORDER[i + 1] : null;
+}
+
+function getOrCreateActiveAlert() {
+  let alert = state.alerts.find(a => a.status === "active");
+  if (!alert) {
+    alert = {
+      id: newId(),
+      triggeredAt: nowMs(),
+      resolvedAt: null,
+      currentLevel: "l1",
+      status: "active",
+      resolution: null,
+      timeline: [],
+    };
+    state.alerts.unshift(alert);
+  }
+  return alert;
+}
+
+function executeLevelActions(alert, level) {
+  const u = state.user;
+  const at = new Date().toISOString();
+
+  if (level === "l1") {
+    notify("push", "self", "你已超时未签到",
+      "如果你看到这条消息，请尽快打开 App 完成签到。", "alert", alert.id);
+    alert.timeline.push({ level: "l1", action: "push_to_user", at });
+  } else if (level === "l2") {
+    notify("sms", u.phone, "紧急：长时间未签到",
+      `亲爱的${u.nickname}，你已长时间未签到，请尽快签到，否则我们将通知你的紧急联系人。`,
+      "alert", alert.id);
+    notify("voice", u.phone, "电话语音提醒", "自动外呼用户本人，确认状态。", "alert", alert.id);
+    alert.timeline.push({ level: "l2", action: "sms_voice_to_user", at });
+  } else if (level === "l3") {
+    const first = [...state.contacts].sort((a, b) => a.priority - b.priority)[0];
+    if (!first) {
+      alert.timeline.push({ level: "l3", action: "no_contact_skipped", at });
+    } else {
+      notify("sms", first.phone, `${u.nickname} 长时间未签到`,
+        `你的${first.relation || "亲友"}${u.nickname}已超过设定时间未签到死了么 App，请尽快联系本人确认安全。`,
+        "alert", alert.id);
+      alert.timeline.push({ level: "l3", action: "notify_first_contact", at, target: first.phone });
+    }
+  } else if (level === "l4") {
+    if (state.contacts.length === 0) {
+      alert.timeline.push({ level: "l4", action: "no_contacts", at });
+    } else {
+      state.contacts.forEach(c => {
+        notify("sms", c.phone, `【紧急】${u.nickname} 持续未响应`,
+          `${u.nickname}（${u.phone}）已多次提醒仍未签到，可能存在意外。请立即上门或拨打 110/120 协助查看。`,
+          "alert", alert.id);
+        notify("voice", c.phone, "紧急电话呼叫",
+          `自动外呼联系人 ${c.name || c.phone}`, "alert", alert.id);
+      });
+      alert.timeline.push({ level: "l4", action: "notify_all_contacts", at, count: state.contacts.length });
+    }
+  }
+  alert.currentLevel = level;
+}
+
+function tick() {
+  if (!state.user) return;
+  const u = state.user;
+  const now = nowMs();
+
+  // 1. 处理 SOS PENDING -> ACTIVE
+  state.sosEvents.filter(s => s.status === "pending").forEach(sos => {
+    if (now >= sos.countdownUntil) {
+      sos.status = "active";
+      sos.activatedAt = now;
+      if (state.contacts.length === 0) {
+        notify("push", "self", "SOS 已激活但无紧急联系人",
+          "请尽快添加联系人，或自行拨打 120/110。", "sos", sos.id);
+      } else {
+        const loc = (sos.lat != null && sos.lng != null)
+          ? ` 位置: ${sos.lat.toFixed(6)},${sos.lng.toFixed(6)}` : "";
+        state.contacts.forEach(c => {
+          notify("sms", c.phone, `【SOS】${u.nickname} 紧急呼救`,
+            `${u.nickname}(${u.phone}) 通过死了么 App 触发了 SOS。${loc} 请立即联系或前往救援，必要时拨打 120/110。`,
+            "sos", sos.id);
+          notify("voice", c.phone, "SOS 电话呼叫",
+            `自动外呼 ${c.name || c.phone}`, "sos", sos.id);
+        });
+      }
+    }
+  });
+
+  // 2. 处理超时预警
+  const sinceMs = now - u.lastCheckIn;
+  const overdueMs = (u.period + u.grace) * 1000;
+  if (sinceMs > overdueMs) {
+    let target = null;
+    if (u.alertLevel === "none") {
+      target = "l1";
+    } else if (u.alertLevelAdvancedAt && now - u.alertLevelAdvancedAt >= u.advance * 1000) {
+      target = nextLevel(u.alertLevel);
+    }
+    if (target) {
+      const alert = getOrCreateActiveAlert();
+      executeLevelActions(alert, target);
+      u.alertLevel = target;
+      u.alertLevelAdvancedAt = now;
+    }
+  }
+
+  saveState();
+  refreshUI();
+}
+
+setInterval(tick, 1000);
+
+// =============================================================================
+// UI 刷新
+// =============================================================================
+
+function showMain() {
+  document.getElementById("login-card").classList.add("hidden");
+  document.getElementById("main-content").classList.remove("hidden");
+  refreshUI();
+}
+
+function refreshUI() {
+  if (!state.user) return;
+
+  document.getElementById("user-info").innerHTML =
+    `${escapeHtml(state.user.nickname)} · ${escapeHtml(state.user.phone)}` +
+    `<br><span class="text-xs text-slate-400">周期 ${state.user.period}s + 宽限 ${state.user.grace}s</span>`;
+
+  const pi = document.getElementById("period-input");
+  const gi = document.getElementById("grace-input");
+  const ai = document.getElementById("advance-input");
+  if (document.activeElement !== pi) pi.value = state.user.period;
+  if (document.activeElement !== gi) gi.value = state.user.grace;
+  if (document.activeElement !== ai) ai.value = state.user.advance;
+
+  refreshStatus();
+  refreshContacts();
+  refreshAlerts();
+  refreshNotifications();
+  refreshSos();
+}
+
+function refreshStatus() {
+  if (!state.user) return;
+  const u = state.user;
+  const since = Math.floor((nowMs() - u.lastCheckIn) / 1000);
+  const until = u.period - since;
+  const overdueAt = u.period + u.grace;
+  const isOverdue = since > overdueAt;
+  const hasActiveSos = !!currentActiveSos();
+  const hasActiveAlert = state.alerts.some(a => a.status === "active");
+
+  let text, detail, badgeText, badgeClass;
+  if (hasActiveSos) {
+    text = "🆘 SOS 进行中";
+    detail = "请尽快确认安全，或等待联系人响应。";
+    badgeText = "SOS"; badgeClass = "bg-red-100 text-red-700";
+  } else if (hasActiveAlert) {
+    text = `⚠️ 预警进行中（${u.alertLevel.toUpperCase()}）`;
+    detail = "立即签到可解除预警。";
+    badgeText = "预警"; badgeClass = "bg-orange-100 text-orange-700";
+  } else if (isOverdue) {
+    text = "⏰ 已超时";
+    detail = `已 ${formatSec(since)} 未签到。`;
+    badgeText = "超时"; badgeClass = "bg-orange-100 text-orange-700";
+  } else if (since > u.period) {
+    text = "🟡 临近超时";
+    detail = `已超出周期 ${formatSec(since - u.period)}，宽限期内。`;
+    badgeText = "临近"; badgeClass = "bg-yellow-100 text-yellow-700";
+  } else {
+    text = "✅ 一切正常";
+    detail = `下次签到截止还有 ${formatSec(until)}`;
+    badgeText = "正常"; badgeClass = "bg-green-100 text-green-700";
+  }
+
+  document.getElementById("status-text").textContent = text;
+  document.getElementById("status-detail").textContent = detail;
+  const badge = document.getElementById("status-badge");
+  badge.textContent = badgeText;
+  badge.className = "px-3 py-1 rounded-full text-xs font-medium " + badgeClass;
+}
+
+function refreshContacts() {
+  const ul = document.getElementById("contacts-list");
+  if (state.contacts.length === 0) {
+    ul.innerHTML = '<li class="text-sm text-slate-400">暂无联系人，建议至少添加 1 位才能完整体验 L3/L4 预警。</li>';
+    return;
+  }
+  ul.innerHTML = state.contacts.map(c => `
+    <li class="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm">
+      <div>
+        <div class="font-medium">${escapeHtml(c.name) || "(未命名)"} <span class="text-slate-400 text-xs ml-2">${escapeHtml(c.relation)}</span></div>
+        <div class="text-slate-500 text-xs">${escapeHtml(c.phone)} · 优先级 ${c.priority}</div>
+      </div>
+      <button onclick="removeContact(${c.id})" class="text-red-500 hover:text-red-700 text-xs">删除</button>
+    </li>
+  `).join("");
+}
+
+function refreshAlerts() {
+  const ul = document.getElementById("alerts-list");
+  if (state.alerts.length === 0) {
+    ul.innerHTML = '<li class="text-slate-400 text-xs">暂无预警事件</li>';
+    return;
+  }
+  ul.innerHTML = state.alerts.slice(0, 10).map(a => {
+    const statusColor = a.status === "active" ? "text-orange-600" : "text-slate-500";
+    const tlText = (a.timeline || []).slice(-5).map(t =>
+      `<div class="text-xs text-slate-500 ml-2">• ${escapeHtml(t.level)} / ${escapeHtml(t.action)} @ ${formatTime(t.at)}</div>`
+    ).join("");
+    return `
+      <li class="border-l-2 border-orange-300 pl-2 py-1">
+        <div class="flex justify-between">
+          <span class="font-medium ${statusColor}">[${a.currentLevel.toUpperCase()}] ${a.status}${a.resolution ? " · " + a.resolution : ""}</span>
+          <span class="text-xs text-slate-400">${formatTime(a.triggeredAt)}</span>
+        </div>
+        ${tlText}
+      </li>
+    `;
+  }).join("");
+}
+
+function refreshNotifications() {
+  const ul = document.getElementById("notifications-list");
+  if (state.notifications.length === 0) {
+    ul.innerHTML = '<li class="text-slate-400 text-xs">暂无通知</li>';
+    return;
+  }
+  const icons = { push: "📱", sms: "✉️", voice: "📞", app: "🔔" };
+  ul.innerHTML = state.notifications.slice(0, 30).map(n => `
+    <li class="border-l-2 border-blue-200 pl-2 py-1">
+      <div class="flex justify-between">
+        <span class="font-medium">${icons[n.channel] || "•"} ${n.channel.toUpperCase()} → ${escapeHtml(n.target)}</span>
+        <span class="text-xs text-slate-400">${formatTime(n.sentAt)}</span>
+      </div>
+      <div class="text-xs text-slate-600">${escapeHtml(n.title)}</div>
+      <div class="text-xs text-slate-500">${escapeHtml(n.body)}</div>
+    </li>
+  `).join("");
+}
+
+function refreshSos() {
+  const sos = currentActiveSos();
+  const idleEl = document.getElementById("sos-idle");
+  const activeEl = document.getElementById("sos-active");
+  if (!sos) {
+    idleEl.classList.remove("hidden");
+    activeEl.classList.add("hidden");
+    document.getElementById("sos-status").textContent = "";
+    return;
+  }
+  idleEl.classList.add("hidden");
+  activeEl.classList.remove("hidden");
+
+  if (sos.status === "pending") {
+    const remain = Math.max(0, (sos.countdownUntil - nowMs()) / 1000);
+    document.getElementById("sos-countdown").textContent = remain > 0 ? Math.ceil(remain) + "s" : "已激活";
+    document.getElementById("sos-status").textContent = "倒计时中";
+  } else {
+    document.getElementById("sos-countdown").textContent = "已激活";
+    document.getElementById("sos-status").textContent = "已通知联系人";
+  }
+}
+
+// =============================================================================
+// 工具函数
+// =============================================================================
+
+function formatSec(s) {
+  if (s === null || s === undefined || isNaN(s)) return "--";
+  const sign = s < 0 ? "已超 " : "";
+  s = Math.abs(s);
+  if (s < 60) return sign + s + "s";
+  if (s < 3600) return sign + Math.floor(s / 60) + "m" + (s % 60) + "s";
+  return sign + Math.floor(s / 3600) + "h" + Math.floor((s % 3600) / 60) + "m";
+}
+
+function formatTime(t) {
+  const d = typeof t === "number" ? new Date(t) : new Date(t);
+  return d.toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+function flash(msg) {
+  const el = document.createElement("div");
+  el.className = "fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50";
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+
+// 高频刷新倒计时显示
+setInterval(() => {
+  if (state.user && !document.getElementById("main-content").classList.contains("hidden")) {
+    refreshStatus();
+    refreshSos();
+  }
+}, 250);
+
+// =============================================================================
+// 启动
+// =============================================================================
+
+if (state.user) {
+  showMain();
+}
+</script>
+
+</body>
+</html>
